@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../eda"
+		},
+		{
+			"path": "../edc"
+		}
+	],
+	"settings": {}
+}
