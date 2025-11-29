@@ -272,6 +272,8 @@ graph TB
       RANKINGS["CollegesRankings.jsx"]
       GRAD["GraduateSchools.jsx"]
       K12["K12s.jsx"]
+      PROFILE["Profile.jsx"]
+      ACCOUNT["Account.jsx"]
     end
 
     subgraph AuthMenu["Auth & User Menu"]
@@ -292,6 +294,7 @@ graph TB
       VARS["apollo/reactiveVars.js\n(userVar, lngVar)"]
       AUTH_Q["apollo/authQueries.js"]
       AUTH_M["apollo/authMutations.js"]
+      AUTH_LINK["index.jsx\n(authLink → Authorization header)"]
     end
 
     subgraph Styling["Styling & Responsiveness"]
@@ -311,6 +314,9 @@ graph TB
   NavLayout --> DOMAINVIEWS[["Domain Views"]]
   DOMAINVIEWS --> DomainViews
 
+  USERMENU --> PROFILE
+  USERMENU --> ACCOUNT
+
   ROUTES --> PROTECTED
   PROTECTED --> AUTH_BTNS
 
@@ -326,6 +332,7 @@ graph TB
   ApolloClient --> VARS
   ApolloClient --> AUTH_Q
   ApolloClient --> AUTH_M
+  ApolloClient --> AUTH_LINK
 
   Styling --> NavLayout
   Styling --> DomainViews
@@ -333,10 +340,10 @@ graph TB
   ```
 - **Shell & routing**: `App.jsx`, `routes.jsx`, `LanguageContext.js`, `i18n.js`, and `index.jsx` compose `ApolloProvider`, language provider, and router, and define public routes with role-aware navigation.
 - **Navigation & layout**: `NavBarTop.jsx`, `NavBarBottomUpper.jsx`, `NavBarBottomLeft.jsx`, `Logo.jsx`, `ContentArea.jsx`, and `Home.jsx` provide the main frame and global navigation chrome.
-- **Domain views**: `Colleges.jsx`, `CollegesRankings.jsx`, `GraduateSchools.jsx`, and `K12s.jsx` implement exploration and ranking experiences for different education segments.
-- **Authentication & user menu**: `AuthButtons.jsx`, `SignInModal.jsx`, `SignUpModal.jsx`, and `UserMenu.jsx` coordinate WebAuthn-based login, session display, profile links, and sign-out; `ProtectedRoute.jsx` guards sensitive paths.
+- **Domain views**: `Colleges.jsx`, `CollegesRankings.jsx`, `GraduateSchools.jsx`, `K12s.jsx`, `Profile.jsx`, and `Account.jsx` implement exploration, ranking, and user-centric views (profile and account management) for different education segments and roles.
+- **Authentication & user menu**: `AuthButtons.jsx`, `SignInModal.jsx`, `SignUpModal.jsx`, and `UserMenu.jsx` coordinate WebAuthn-based login, session display, navigation to `Profile` / `Account`, and sign-out; `ProtectedRoute.jsx` guards sensitive paths.
 - **Modal infrastructure**: `ModalContext.jsx`, `Modal.jsx`, and the `ModalManager` wiring centralize modal state and portal-based rendering.
-- **GraphQL client utilities**: `apollo/reactiveVars.js`, `apollo/authQueries.js`, and `apollo/authMutations.js` define `userVar`/`lngVar`, authentication operations, and shared client-side state.
+- **GraphQL client utilities**: `apollo/reactiveVars.js`, `apollo/authQueries.js`, and `apollo/authMutations.js` define `userVar`/`lngVar`, authentication operations, and shared client-side state. `index.jsx` wires an Apollo `authLink` that reads the JWT from `userVar` and sets the `Authorization: Bearer <token>` header on each GraphQL request.
 - **Styling & responsiveness**: `index.css` and `component/breakpoints.js` define global styles and responsive breakpoints used by `styled-components`.
 
 ---
