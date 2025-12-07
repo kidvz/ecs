@@ -5,12 +5,12 @@
 			"path": "../_repos/js/ecs"
 		},
 		{
-			"name": "eda",
-			"path": "../_repos/js/eda"
-		},
-		{
 			"name": "edc",
 			"path": "../_repos/js/edc"
+		},
+		{
+			"name": "eda",
+			"path": "../_repos/js/eda"
 		}
 	],
 	"settings": {}
