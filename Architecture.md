@@ -435,6 +435,42 @@ sequenceDiagram
   SignInModal-->>User: Close modal, navigate to intended route
 ```
 
+### Access Token Refresh Flow (Sliding Session)
+
+```mermaid
+sequenceDiagram
+  participant Browser as Browser / React SPA
+  participant ApolloClient as Apollo Client (index.jsx)
+  participant ErrorLink as Apollo errorLink
+  participant GraphQL as GraphQL API
+  participant UserResolver as user-resolver.js
+  participant TokenStore as refreshToken store (DynamoDB)
+  participant UserDDB as user-dynamodb.js
+
+  Browser->>ApolloClient: GraphQL query/mutation with Authorization header
+  ApolloClient->>GraphQL: Forward operation over HTTPS
+  GraphQL-->>ApolloClient: GraphQLError { code: "UNAUTHENTICATED" }
+  ApolloClient->>ErrorLink: Invoke errorLink with error, operation, client
+
+  ErrorLink->>ApolloClient: MUTATE RefreshAccessToken
+  ApolloClient->>GraphQL: mutation refreshAccessToken (cookies included)
+  GraphQL->>UserResolver: refreshAccessToken()
+  UserResolver->>TokenStore: getRefreshTokenById(refreshToken from cookie)
+  TokenStore-->>UserResolver: Stored refresh token item (SC → user key)
+  UserResolver->>UserDDB: getUser(uId from SC)
+  UserDDB-->>UserResolver: User profile
+  UserResolver->>UserResolver: jwt.sign({ id, name, displayName }, TTL accessToken)
+  UserResolver->>TokenStore: touchRefreshTokenUsage(refreshToken)
+  UserResolver-->>GraphQL: { accessToken }
+  GraphQL-->>ApolloClient: AuthPayload { accessToken }
+
+  ApolloClient->>ApolloClient: Decode payload, update userVar({ ...claims, accessToken })
+  ApolloClient->>ErrorLink: forward(operation) with new Authorization header
+  ErrorLink->>GraphQL: Retry original operation
+  GraphQL-->>ApolloClient: Successful response
+  ApolloClient-->>Browser: Resolved data for original request
+```
+
 ### Protected Navigation
 
 - `ProtectedRoute` checks `userVar`; unauthenticated access opens `SignInModal` and stores the intended route.
