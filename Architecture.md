@@ -170,15 +170,15 @@ graph TB
 
     subgraph Resolvers["Resolvers"]
       RES_ROOT["resolver.js"]
-      RES_USER["user-resolver.js"]
-      RES_ORG["organization-resolver.js"]
-      RES_SHARED["shared-resolver.js"]
+      RES_USER["resolver-user.js"]
+      RES_ORG["resolver-organization.js"]
+      RES_SHARED["resolver-shared.js"]
     end
 
     subgraph Schema["Schema & Types"]
       SCHEMA_ROOT["schema.js"]
-      SCHEMA_USER["user-schema.js"]
-      SCHEMA_SHARED["shared-schema.js"]
+      SCHEMA_USER["schema-user.js"]
+      SCHEMA_SHARED["schema-shared.js"]
     end
 
     subgraph DAL["Data Access Layer"]
@@ -237,8 +237,8 @@ graph TB
   DAL_CORE --> CACHE
 ```
 
-- **GraphQL resolvers**: `user-resolver.js`, `organization-resolver.js`, `shared-resolver.js`, and the root `resolver.js` coordinate schema-level operations for users, organizations, institutions, programs, applications, notifications, and admin utilities.
-- **Schema & types**: `schema.js`, `user-schema.js`, and `shared-schema.js` define the public GraphQL surface consumed by the SPA.
+- **GraphQL resolvers**: `resolver-user.js`, `resolver-organization.js`, `resolver-shared.js`, and the root `resolver.js` coordinate schema-level operations for users, organizations, institutions, programs, applications, notifications, and admin utilities.
+- **Schema & types**: `schema.js`, `schema-user.js`, and `schema-shared.js` define the public GraphQL surface consumed by the SPA.
 - **Data access layer**: `user-dynamodb.js`, `organization-dynamodb.js`, `application-dynamodb.js`, `admin-dynamodb.js`, `dynamodb.js`, and related tests (`dynamodb.test.js`, `dynamodb-v2.test.js`) encapsulate single-table DynamoDB patterns, GSIs, and query helpers.
 - **Core service framework**: `tiny.js`, `tiny-core.js`, `tiny-dest.js`, and `pino-log.js` standardize Lambda-style handlers, logging, error handling, and configuration.
 - **Event & cache utilities**: SNS/SQS publisher helpers for domain events plus `lru-cache.js` for hot-path caching where appropriate.
@@ -359,7 +359,7 @@ sequenceDiagram
   participant WebAuthnClient as webauthn-client.js
   participant ApolloClient as Apollo Client
   participant GraphQL as GraphQL API
-  participant UserResolver as user-resolver.js
+  participant UserResolver as resolver-user.js
   participant WebAuthnServer as webauthn-server.js
   participant UserDDB as user-dynamodb.js
 
@@ -401,7 +401,7 @@ sequenceDiagram
   participant WebAuthnClient as webauthn-client.js
   participant ApolloClient as Apollo Client
   participant GraphQL as GraphQL API
-  participant UserResolver as user-resolver.js
+  participant UserResolver as resolver-user.js
   participant WebAuthnServer as webauthn-server.js
   participant UserDDB as user-dynamodb.js
 
@@ -443,7 +443,7 @@ sequenceDiagram
   participant ApolloClient as Apollo Client (index.jsx)
   participant ErrorLink as Apollo errorLink
   participant GraphQL as GraphQL API
-  participant UserResolver as user-resolver.js
+  participant UserResolver as resolver-user.js
   participant TokenStore as refreshToken store (DynamoDB)
   participant UserDDB as user-dynamodb.js
 
