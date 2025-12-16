@@ -435,40 +435,66 @@ sequenceDiagram
   SignInModal-->>User: Close modal, navigate to intended route
 ```
 
-### Access Token Refresh Flow (Sliding Session)
+### Access Token Refresh & Rotation (Sliding Session)
+
+On app bootstrap and whenever the API responds with `UNAUTHENTICATED`, the SPA uses the same refresh flow:
+
+- Frontend: index.jsx maintains a single `ongoingRefreshPromise` shared between the startup `attemptInitialRefresh` and the Apollo `errorLink` to coalesce concurrent refresh attempts.
+- Session storage: auth-session.js reads/writes the refresh token in `localStorage` and updates `userVar` from the latest access token via `setSession` / `clearSession`.
+- Backend: resolver-user.js implements refresh-token families; each call to `refreshAccessToken` verifies that the presented refresh token is the current token for an active family, detects reuse of old tokens, and rotates to a brand-new refresh token in a single atomic operation.
 
 ```mermaid
 sequenceDiagram
   participant Browser as Browser / React SPA
-  participant ApolloClient as Apollo Client (index.jsx)
-  participant ErrorLink as Apollo errorLink
+  participant ApolloClient as Apollo Client (links)
+  participant ErrorLink as Apollo errorLink (index.jsx)
+  participant AuthSession as auth-session.js (localStorage + userVar)
   participant GraphQL as GraphQL API
   participant UserResolver as resolver-user.js
-  participant TokenStore as refreshToken store (DynamoDB)
+  participant RefreshStore as Refresh token family store (DynamoDB)
   participant UserDDB as user-dynamodb.js
 
-  Browser->>ApolloClient: GraphQL query/mutation with Authorization header
+  Browser->>ApolloClient: GraphQL op with Authorization: Bearer accessToken
   ApolloClient->>GraphQL: Forward operation over HTTPS
   GraphQL-->>ApolloClient: GraphQLError { code: "UNAUTHENTICATED" }
   ApolloClient->>ErrorLink: Invoke errorLink with error, operation, client
 
-  ErrorLink->>ApolloClient: MUTATE RefreshAccessToken
-  ApolloClient->>GraphQL: mutation refreshAccessToken (cookies included)
-  GraphQL->>UserResolver: refreshAccessToken()
-  UserResolver->>TokenStore: getRefreshTokenById(refreshToken from cookie)
-  TokenStore-->>UserResolver: Stored refresh token item (SC → user key)
-  UserResolver->>UserDDB: getUser(uId from SC)
-  UserDDB-->>UserResolver: User profile
-  UserResolver->>UserResolver: jwt.sign({ id, name, displayName }, TTL accessToken)
-  UserResolver->>TokenStore: touchRefreshTokenUsage(refreshToken)
-  UserResolver-->>GraphQL: { accessToken }
-  GraphQL-->>ApolloClient: AuthPayload { accessToken }
-
-  ApolloClient->>ApolloClient: Decode payload, update userVar({ ...claims, accessToken })
-  ApolloClient->>ErrorLink: forward(operation) with new Authorization header
-  ErrorLink->>GraphQL: Retry original operation
-  GraphQL-->>ApolloClient: Successful response
-  ApolloClient-->>Browser: Resolved data for original request
+  ErrorLink->>AuthSession: getRefreshToken()
+  alt No refresh token
+    AuthSession-->>ErrorLink: null
+    ErrorLink->>AuthSession: clearSession()
+    ErrorLink-->>Browser: Surface unauthenticated state
+  else Refresh token present
+    AuthSession-->>ErrorLink: refreshToken
+    ErrorLink->>ApolloClient: if no ongoingRefreshPromise, mutate RefreshAccessToken(refreshToken)
+    ApolloClient->>GraphQL: mutation refreshAccessToken(refreshToken)
+    GraphQL->>UserResolver: refreshAccessToken(refreshToken)
+    UserResolver->>RefreshStore: getRefreshTokenById(refreshToken)
+    RefreshStore-->>UserResolver: refresh token item { uIdKVS, familyIdKVS }
+    UserResolver->>RefreshStore: getRefreshFamilyById(familyIdKVS)
+    RefreshStore-->>UserResolver: active family + currentRefreshTokenKVS
+    alt Token reused or family inactive
+      UserResolver->>RefreshStore: revokeRefreshFamily()
+      UserResolver-->>GraphQL: GraphQLError { code: "UNAUTHENTICATED", reason: "TOKEN_REUSED" }
+      GraphQL-->>ApolloClient: Error
+      ApolloClient-->>ErrorLink: error
+      ErrorLink->>AuthSession: clearSession()
+      ErrorLink-->>Browser: Unauthenticated
+    else Token valid
+      UserResolver->>UserDDB: getUser(uId)
+      UserDDB-->>UserResolver: User profile
+      UserResolver->>UserResolver: Sign new accessToken (short TTL)
+      UserResolver->>RefreshStore: rotateRefreshTokenInFamily(currentRefreshTokenKVS, nextRefreshToken)
+      UserResolver-->>GraphQL: AuthPayload { accessToken, refreshToken: nextRefreshToken }
+      GraphQL-->>ApolloClient: AuthPayload
+      ApolloClient-->>ErrorLink: payload
+      ErrorLink->>AuthSession: setSession({ accessToken, refreshToken: nextRefreshToken })
+      ErrorLink->>ApolloClient: forward(operation) with updated Authorization header
+      ApolloClient->>GraphQL: Retry original operation
+      GraphQL-->>ApolloClient: Successful response
+      ApolloClient-->>Browser: Resolved data for original request
+    end
+  end
 ```
 
 ### Protected Navigation
