@@ -1,16 +1,13 @@
 {
 	"folders": [
 		{
-			"name": "ecs",
-			"path": "../_repos/js/ecs"
+			"path": "../_repos/ecs"
 		},
 		{
-			"name": "edc",
-			"path": "../_repos/js/edc"
+			"path": "../_repos/edc"
 		},
 		{
-			"name": "eda",
-			"path": "../_repos/js/eda"
+			"path": "../_repos/eda"
 		}
 	],
 	"settings": {}

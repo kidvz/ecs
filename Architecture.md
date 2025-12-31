@@ -437,11 +437,72 @@ sequenceDiagram
 
 ### Access Token Refresh & Rotation (Sliding Session)
 
-On app bootstrap and whenever the API responds with `UNAUTHENTICATED`, the SPA uses the same refresh flow:
+There are two primary entry points for refreshing access tokens that both share the same backend `refreshAccessToken` mutation and refresh-token family semantics:
 
-- Frontend: index.jsx maintains a single `ongoingRefreshPromise` shared between the startup `attemptInitialRefresh` and the Apollo `errorLink` to coalesce concurrent refresh attempts.
-- Session storage: auth-session.js reads/writes the refresh token in `localStorage` and updates `userVar` from the latest access token via `setSession` / `clearSession`.
-- Backend: resolver-user.js implements refresh-token families; each call to `refreshAccessToken` verifies that the presented refresh token is the current token for an active family, detects reuse of old tokens, and rotates to a brand-new refresh token in a single atomic operation.
+- Initial app bootstrap: `index.jsx` calls `attemptInitialRefresh` before rendering, using a shared `ongoingRefreshPromise` to avoid concurrent refreshes.
+- Runtime auth failures: the Apollo `errorLink` reacts to `UNAUTHENTICATED` responses and reuses the same `ongoingRefreshPromise` when a refresh is already in flight.
+
+- Frontend: `index.jsx` maintains a single `ongoingRefreshPromise` shared between `attemptInitialRefresh` and the Apollo `errorLink` to coalesce concurrent refresh attempts.
+- Session storage: `auth-session.js` reads/writes the refresh token in `localStorage` and updates `userVar` from the latest access token via `setSession` / `clearSession`.
+- Backend: `resolver-user.js` implements refresh-token families; each call to `refreshAccessToken` verifies that the presented refresh token is the current token for an active family, detects reuse of old tokens, and rotates to a brand-new refresh token in a single atomic operation.
+
+#### Initial Token Refresh on App Bootstrap
+
+```mermaid
+sequenceDiagram
+  participant Browser as Browser / HTML Shell
+  participant Bootstrap as bootstrap() in index.jsx
+  participant InitialRefresh as attemptInitialRefresh()
+  participant AuthSession as auth-session.js (localStorage + userVar)
+  participant ApolloClient as Apollo Client
+  participant GraphQL as GraphQL API
+  participant UserResolver as resolver-user.js
+  participant RefreshStore as Refresh token family store (DynamoDB)
+  participant UserDDB as user-dynamodb.js
+
+  Browser->>Bootstrap: Load SPA bundle
+  Bootstrap->>InitialRefresh: await attemptInitialRefresh()
+  alt Refresh already in progress (from errorLink)
+    InitialRefresh-->>Bootstrap: return existing ongoingRefreshPromise
+  else No in-flight refresh
+    InitialRefresh->>AuthSession: getRefreshToken()
+    alt No stored refresh token
+      AuthSession-->>InitialRefresh: null
+      InitialRefresh->>AuthSession: clearSession()
+      InitialRefresh-->>Bootstrap: null (start unauthenticated)
+    else Refresh token present
+      AuthSession-->>InitialRefresh: refreshToken
+      InitialRefresh->>ApolloClient: client.mutate(RefreshAccessToken, { refreshToken })
+      ApolloClient->>GraphQL: mutation refreshAccessToken(refreshToken)
+      GraphQL->>UserResolver: refreshAccessToken(refreshToken)
+      UserResolver->>RefreshStore: getRefreshTokenById(refreshToken)
+      RefreshStore-->>UserResolver: refresh token item { uIdKVS, familyIdKVS }
+      UserResolver->>RefreshStore: getRefreshFamilyById(familyIdKVS)
+      RefreshStore-->>UserResolver: active family + currentRefreshTokenKVS
+      alt Token reused or family inactive
+        UserResolver->>RefreshStore: revokeRefreshFamily()
+        UserResolver-->>GraphQL: GraphQLError { code: "UNAUTHENTICATED", reason: "TOKEN_REUSED" }
+        GraphQL-->>ApolloClient: Error
+        ApolloClient-->>InitialRefresh: throw error
+        InitialRefresh->>AuthSession: clearSession()
+        InitialRefresh-->>Bootstrap: null (start unauthenticated)
+      else Token valid
+        UserResolver->>UserDDB: getUser(uId)
+        UserDDB-->>UserResolver: User profile
+        UserResolver->>UserResolver: Sign new accessToken (short TTL)
+        UserResolver->>RefreshStore: rotateRefreshTokenInFamily(currentRefreshTokenKVS, nextRefreshToken)
+        UserResolver-->>GraphQL: AuthPayload { accessToken, refreshToken: nextRefreshToken }
+        GraphQL-->>ApolloClient: AuthPayload
+        ApolloClient-->>InitialRefresh: { accessToken, refreshToken: nextRefreshToken }
+        InitialRefresh->>AuthSession: setSession({ accessToken, refreshToken: nextRefreshToken })
+        InitialRefresh-->>Bootstrap: Authenticated session restored
+      end
+    end
+  end
+  Bootstrap->>Browser: Render React app with initial userVar state
+```
+
+#### Error-Triggered Token Refresh (UNAUTHENTICATED)
 
 ```mermaid
 sequenceDiagram
